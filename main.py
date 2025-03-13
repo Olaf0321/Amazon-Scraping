@@ -4,11 +4,12 @@ import threading
 import time
 import openpyxl
 import os
+from scrap import scrap_info
 
 class ExcelProcessor:
     def __init__(self, root):
         self.root = root
-        self.root.title("Excel Data Processor")
+        self.root.title("Amazon Products Scraping")
         self.root.geometry("800x500")
         self.root.configure(bg="#F0F0F0")
         self.root.resizable(False, False)
@@ -87,9 +88,14 @@ class ExcelProcessor:
             wb = openpyxl.load_workbook(self.input_path.get())
             ws = wb.active
             
+            # Create the output workbook and sheet
             output_wb = openpyxl.Workbook()
             output_ws = output_wb.active
             output_ws.title = "Processed Data"
+            
+            # Add headers to the output Excel file
+            headers = ["No", "ASIN", "商品名", "メーカー名", "販売業者", "住所", "運営責任者名", "店舗名", "URL"]
+            output_ws.append(headers)
             
             total_rows = ws.max_row
             self.progress["maximum"] = total_rows
@@ -97,7 +103,20 @@ class ExcelProcessor:
             for i, row in enumerate(ws.iter_rows(values_only=True)):
                 if not self.running:
                     break
-                output_ws.append(row)  # Dummy processing (copying data)
+                output_json = scrap_info(row[0])
+                result = [
+                    i + 1,
+                    output_json.get('ASIN', ''),
+                    output_json.get('商品名', ''),
+                    output_json.get('メーカー名', ''),
+                    output_json.get('販売業者', ''),
+                    output_json.get('住所', ''),
+                    output_json.get('運営責任者名', ''),
+                    output_json.get('店舗名', ''),
+                    output_json.get('URL', '')
+                ]
+                # Append the result to the output worksheet
+                output_ws.append(result)
                 self.status_label.config(text=f"Processing row {i + 1}/{total_rows}...")
                 self.progress["value"] = i + 1
                 time.sleep(0.5)  # Simulate processing time
@@ -115,7 +134,7 @@ class ExcelProcessor:
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
             self.progress.stop()
-    
+
     def stop_processing(self):
         self.running = False
         self.status_label.config(text="Stopping...", foreground="#E53935")
