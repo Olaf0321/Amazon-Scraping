@@ -24,7 +24,7 @@ def scrap_info(asin_code):
     }
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context(
             user_agent=USER_AGENT,
             viewport={"width": random.randint(1200, 1400), "height": random.randint(700, 900)}

@@ -5,7 +5,18 @@ import time
 import openpyxl
 import os
 from scrap import scrap_info
+from datetime import datetime
+import pytz
 
+def get_current_time():
+    # Get the Japan timezone
+    japan_tz = pytz.timezone('Asia/Tokyo')
+
+    # Get the current time in Japan timezone
+    japan_time = datetime.now(japan_tz)
+
+    # Print the current time in Japan
+    return japan_time.strftime('%Y-%m-%d %H-%M-%S')
 class ExcelProcessor:
     def __init__(self, root):
         self.root = root
@@ -84,6 +95,7 @@ class ExcelProcessor:
         threading.Thread(target=self.process_data, daemon=True).start()
     
     def process_data(self):
+        output_file_name = f"output({get_current_time()}).xlsx"
         try:
             wb = openpyxl.load_workbook(self.input_path.get())
             ws = wb.active
@@ -117,13 +129,13 @@ class ExcelProcessor:
                 ]
                 # Append the result to the output worksheet
                 output_ws.append(result)
+                output_file_path = os.path.join(self.output_folder.get(), output_file_name)
+                output_wb.save(output_file_path)
                 self.status_label.config(text=f"Processing row {i + 1}/{total_rows}...")
                 self.progress["value"] = i + 1
                 time.sleep(0.5)  # Simulate processing time
             
             if self.running:
-                output_file_path = os.path.join(self.output_folder.get(), "output.xlsx")
-                output_wb.save(output_file_path)
                 self.status_label.config(text="Processing Completed", foreground="#388E3C")
             else:
                 self.status_label.config(text="Processing Stopped", foreground="#E53935")
