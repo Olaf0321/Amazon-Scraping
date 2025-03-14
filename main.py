@@ -128,6 +128,7 @@ class ExcelProcessor:
             else:
                 self.status_label.config(text="Processing Stopped", foreground="#E53935")
         except Exception as e:
+            print(f"Error {str(e)}")
             messagebox.showerror("Error", str(e))
         finally:
             self.running = False
