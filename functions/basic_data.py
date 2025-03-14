@@ -1,7 +1,7 @@
 import random
 
-def human_pause(page):
-    page.wait_for_timeout(random.randint(5000, 10000))
+def human_pause(page, st, ed):
+    page.wait_for_timeout(random.randint(st, ed))
 
 # Function to extract value from table based on the given header text
 def get_table_value(page, table_id, header_text):
@@ -21,11 +21,16 @@ def get_table_value(page, table_id, header_text):
 
 def get_basic_data(page):
     # Scroll randomly like a human
-    for _ in range(random.randint(3, 6)):  
+    scroll_amount_sum = 0
+    for _ in range(random.randint(2, 4)):
         scroll_amount = random.randint(300, 700)
+        scroll_amount_sum += scroll_amount
         page.mouse.wheel(0, scroll_amount)
-        human_pause(page)
+        human_pause(page, 1000, 3000)
     
+    page.mouse.wheel(0, -scroll_amount_sum)
+    human_pause(page, 1000, 3000)
+
     result = {
         "商品名": "",
         "メーカー名": "",
