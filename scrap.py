@@ -57,3 +57,4 @@ def scrap_info(asin_code):
         browser.close()
 
     return output_json
+    

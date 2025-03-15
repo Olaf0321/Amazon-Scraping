@@ -48,7 +48,8 @@ def get_basic_data(page):
 
     # Extract the "メーカー" information
     manufacturer = get_table_value(page, "productDetails_techSpec_section_1", "メーカー")
-    result["メーカー名"] = manufacturer
+    if manufacturer != "Not found":
+        result["メーカー名"] = manufacturer
 
     print("correctly get basic data!")
     return result
