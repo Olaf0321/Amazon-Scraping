@@ -1,3 +1,4 @@
+# Amazon-Scraping
 The current tool inputs the ASIN code and obtains the corresponding product's "商品名", "住所", "運営責任者名", and "URL" information.
 
 Description of the tool's interface
