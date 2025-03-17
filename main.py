@@ -6,7 +6,19 @@ import openpyxl
 import os
 from scrap import scrap_info
 from datetime import datetime
+from config import SITE_URL, USER_AGENT
+from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
 import pytz
+import random
+from playwright._impl._driver import get_driver_env
+
+# env_vars = get_driver_env()
+# print(env_vars["PLAYWRIGHT_BROWSERS_PATH"])
+
+flag = -1
+output_file_name = ""
+array = []
 
 def get_current_time():
     # Get the Japan timezone
@@ -17,6 +29,7 @@ def get_current_time():
 
     # Print the current time in Japan
     return japan_time.strftime('%Y-%m-%d %H-%M-%S')
+
 class ExcelProcessor:
     def __init__(self, root):
         self.root = root
@@ -62,10 +75,12 @@ class ExcelProcessor:
         
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(pady=30)
-        self.start_button = ttk.Button(button_frame, text="実行", command=self.start_processing, width=18)
+        self.start_button = ttk.Button(button_frame, text="スタート", command=self.start_processing, width=18)
         self.start_button.pack(side=tk.LEFT, padx=15)
         self.stop_button = ttk.Button(button_frame, text="停止", command=self.stop_processing, state=tk.DISABLED, width=18)
         self.stop_button.pack(side=tk.LEFT, padx=15)
+        self.play_button = ttk.Button(button_frame, text="再生", command=self.play_processing, state=tk.DISABLED, width=18)
+        self.play_button.pack(side=tk.LEFT, padx=15)
 
         self.status_label = ttk.Label(main_frame, text="状態: 待機中", font=("Helvetica Neue", 14))
         self.status_label.pack(pady=20)
@@ -84,6 +99,7 @@ class ExcelProcessor:
             self.output_folder.set(folder)
     
     def start_processing(self):
+        globals()["array"] = []
         if not self.input_path.get() or not self.output_folder.get():
             messagebox.showerror("エラー", "入力ファイルと出力フォルダーの両方のパスを選択してください。")
             return
@@ -92,7 +108,6 @@ class ExcelProcessor:
         self.start_button.config(state=tk.DISABLED)
         self.stop_button.config(state=tk.NORMAL)
         self.status_label.config(text="処理中...", foreground="#1E88E5")
-        self.progress.start()
 
         # Disable the browse button when processing starts
         self.input_browse_button.config(state=tk.DISABLED)
@@ -101,7 +116,7 @@ class ExcelProcessor:
         threading.Thread(target=self.process_data, daemon=True).start()
     
     def process_data(self):
-        output_file_name = f"出力({get_current_time()}).xlsx"
+        globals()["output_file_name"] = f"出力({get_current_time()}).xlsx"
         try:
             wb = openpyxl.load_workbook(self.input_path.get())
             ws = wb.active
@@ -112,34 +127,48 @@ class ExcelProcessor:
             output_ws.title = "処理されたデータ"
             
             # Add headers to the output Excel file
-            headers = ["No", "ASIN", "商品名", "メーカー名", "販売業者", "住所", "運営責任者名", "店舗名", "URL"]
+            headers = ["No", "ASIN", "商品名", "住所", "運営責任者名", "URL"]
             output_ws.append(headers)
             
             total_rows = ws.max_row
             self.progress["maximum"] = total_rows
-            
-            for i, row in enumerate(ws.iter_rows(values_only=True)):
-                if not self.running or i == 3:
-                    break
-                self.status_label.config(text=f"処理中 行 {i + 1}/{total_rows}...")
-                self.progress["value"] = i + 1
-                output_json = scrap_info(row[0])
-                result = [
-                    i + 1,
-                    output_json.get('ASIN', ''),
-                    output_json.get('商品名', ''),
-                    output_json.get('メーカー名', ''),
-                    output_json.get('販売業者', ''),
-                    output_json.get('住所', ''),
-                    output_json.get('運営責任者名', ''),
-                    output_json.get('店舗名', ''),
-                    output_json.get('URL', '')
-                ]
-                # Append the result to the output worksheet
-                output_ws.append(result)
-                output_file_path = os.path.join(self.output_folder.get(), output_file_name)
-                output_wb.save(output_file_path)
-                time.sleep(0.5)  # Simulate processing time
+
+            # Set Playwright to use the manually installed browser path
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = r"D:"
+
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context(
+                    user_agent=USER_AGENT,
+                    viewport={"width": random.randint(1200, 1400), "height": random.randint(700, 900)}
+                )
+                page = context.new_page()
+                stealth_sync(page)
+                page.goto(SITE_URL)
+
+                for i, row in enumerate(ws.iter_rows(values_only=True)):
+                    if i >= 3: break
+                    if not self.running:
+                        break
+                    self.status_label.config(text=f"処理中 行 {i + 1}/{total_rows}...")
+                    self.progress["value"] = i + 1
+                    output_json = scrap_info(page, row[0], 0, i)
+                    result = [
+                        i + 1,
+                        output_json.get('ASIN', ''),
+                        output_json.get('商品名', ''),
+                        output_json.get('住所', ''),
+                        output_json.get('運営責任者名', ''),
+                        output_json.get('URL', '')
+                    ]
+                    # Append the result to the output worksheet
+                    output_ws.append(result)
+                    globals()['array'].append(result)
+                    output_file_path = os.path.join(self.output_folder.get(), output_file_name)
+                    output_wb.save(output_file_path)
+                    time.sleep(0.5)  # Simulate processing time
+
+                browser.close()
             
             if self.running:
                 self.status_label.config(text="処理が完了しました", foreground="#388E3C")
@@ -160,6 +189,95 @@ class ExcelProcessor:
         self.running = False
         self.status_label.config(text="現在実行中のデータが完了次第、処理を停止します。", foreground="#E53935")
         self.stop_button.config(state=tk.DISABLED)
+        self.start_button.config(state=tk.NORMAL)
+        self.play_button.config(state=tk.NORMAL)
+
+    def play_processing(self):
+        self.running = True
+        self.start_button.config(state=tk.DISABLED)
+        self.stop_button.config(state=tk.NORMAL)
+        self.status_label.config(text="処理中...", foreground="#1E88E5")
+        self.play_button.config(state=tk.DISABLED)
+
+        threading.Thread(target=self.play_process_data, daemon=True).start()
+
+
+    def play_process_data(self):
+        try:
+            wb = openpyxl.load_workbook(self.input_path.get())
+            ws = wb.active
+            
+            # Create the output workbook and sheet
+            output_wb = openpyxl.Workbook()
+            output_ws = output_wb.active
+            output_ws.title = "処理されたデータ"
+            
+            # Add headers to the output Excel file
+            headers = ["No", "ASIN", "商品名", "住所", "運営責任者名", "URL"]
+            output_ws.append(headers)
+            
+            total_rows = ws.max_row
+            self.progress["maximum"] = total_rows
+            
+            length = len(globals()["array"])
+
+            # Set Playwright to use the manually installed browser path
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = r"D:"
+
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context(
+                    user_agent=USER_AGENT,
+                    viewport={"width": random.randint(1200, 1400), "height": random.randint(700, 900)}
+                )
+                page = context.new_page()
+                stealth_sync(page)
+                page.goto(SITE_URL)
+
+                for i, row in enumerate(ws.iter_rows(values_only=True)):
+                    if i >= 3: break
+                    if not self.running:
+                        break
+                    
+                    if i < length:
+                        output_ws.append(globals()["array"][i])
+                        continue
+
+                    self.status_label.config(text=f"処理中 行 {i + 1}/{total_rows}...")
+                    self.progress["value"] = i + 1
+                    output_json = scrap_info(page, row[0], length, i)
+                    result = [
+                        i + 1,
+                        output_json.get('ASIN', ''),
+                        output_json.get('商品名', ''),
+                        output_json.get('住所', ''),
+                        output_json.get('運営責任者名', ''),
+                        output_json.get('URL', '')
+                    ]
+                    # Append the result to the output worksheet
+                    output_ws.append(result)
+                    globals()['array'].append(result)
+                    output_file_path = os.path.join(self.output_folder.get(), output_file_name)
+                    output_wb.save(output_file_path)
+                    time.sleep(0.5)  # Simulate processing time
+                
+                browser.close()
+
+            if self.running:
+                self.status_label.config(text="処理が完了しました", foreground="#388E3C")
+            else:
+                self.status_label.config(text="処理が停止しました", foreground="#E53935")
+        except Exception as e:
+            print(f"Error {str(e)}")
+            messagebox.showerror("Error", str(e))
+        finally:
+            self.running = False
+            self.start_button.config(state=tk.NORMAL)
+            self.stop_button.config(state=tk.DISABLED)
+            self.play_button.config(state=tk.DISABLED)
+            self.progress.stop()
+            self.input_browse_button.config(state=tk.NORMAL)
+            self.output_browse_button.config(state=tk.NORMAL)
 
 if __name__ == "__main__":
     root = tk.Tk()
